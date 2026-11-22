@@ -1,0 +1,520 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+enum RegistrationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+enum TicketStatus {
+  ACTIVE
+  USED
+  CANCELLED
+}
+
+enum AssignmentStatus {
+  ASSIGNED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum IncidentStatus {
+  REPORTED
+  INVESTIGATING
+  RESOLVED
+  CLOSED
+}
+
+enum AlertType {
+  CAPACITY
+  CROWD_DENSITY
+  SECURITY
+  EMERGENCY
+}
+
+enum AlertStatus {
+  ACTIVE
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+enum ScanType {
+  ENTRY
+  EXIT
+}
+
+enum ScanResult {
+  ACCEPTED
+  REJECTED
+}
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  fullName     String
+  email        String     @unique
+  phone        String?    @unique
+  passwordHash String
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  roles                 UserRole[]
+  organizedEvents       Event[]               @relation("EventOrganizer")
+  attendeeRegistrations Registration[]        @relation("RegistrationAttendee")
+  volunteerProfile      VolunteerProfile?
+  staffProfile          StaffProfile?
+  volunteerAssignments  VolunteerAssignment[]
+  staffAssignments      StaffAssignment[]
+  reportedIncidents     Incident[]            @relation("IncidentReporter")
+  assignedIncidents     Incident[]            @relation("IncidentAssignee")
+  createdAlerts         Alert[]
+  auditLogs             AuditLog[]
+  gateScans             GateScan[]            @relation("GateScanOperator")
+  crowdObservations     CrowdObservation[]    @relation("CrowdObserver")
+  departmentId          String?               @db.Uuid
+  isDepartmentManager   Boolean               @default(false)
+  department            Department?           @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  incidentHistory       IncidentStatusHistory[]
+  incidentAssignmentsAsOfficer IncidentAssignment[] @relation("IncidentOfficer")
+  incidentAssignmentsCreated  IncidentAssignment[] @relation("IncidentAssignedBy")
+  feedback              IncidentFeedback[]
+  complaints            IncidentComplaint[]
+  notifications         CivicNotification[]   @relation("CivicNotificationRecipient")
+  sentNotifications     CivicNotification[]   @relation("CivicNotificationActor")
+}
+
+model Department {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users      User[]
+  categories IncidentCategory[]
+}
+
+model IncidentCategory {
+  id           String   @id @default(uuid()) @db.Uuid
+  departmentId String   @db.Uuid
+  name         String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  incidents  Incident[]
+
+  @@unique([departmentId, name])
+}
+
+model Role {
+  id          String     @id @default(uuid()) @db.Uuid
+  name        String     @unique
+  description String?
+  users       UserRole[]
+  createdAt   DateTime   @default(now())
+}
+
+model UserRole {
+  userId     String   @db.Uuid
+  roleId     String   @db.Uuid
+  assignedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model Venue {
+  id            String   @id @default(uuid()) @db.Uuid
+  name          String
+  address       String
+  city          String
+  state         String
+  country       String
+  totalCapacity Int?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  events Event[]
+  zones  Zone[]
+}
+
+model Event {
+  id          String      @id @default(uuid()) @db.Uuid
+  name        String
+  description String?
+  slug        String      @unique
+  status      EventStatus @default(DRAFT)
+  startDate   DateTime
+  endDate     DateTime
+  venueId     String      @db.Uuid
+  organizerId String      @db.Uuid
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  venue                Venue                 @relation(fields: [venueId], references: [id])
+  organizer            User                  @relation("EventOrganizer", fields: [organizerId], references: [id])
+  ticketTypes          TicketType[]
+  registrations        Registration[]
+  volunteerAssignments VolunteerAssignment[]
+  staffAssignments     StaffAssignment[]
+  incidents            Incident[]
+  alerts               Alert[]
+  gateScans            GateScan[]
+  crowdObservations    CrowdObservation[]
+}
+
+model Zone {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  capacity  Int
+  venueId   String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  venue                Venue                 @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  gates                Gate[]
+  volunteerAssignments VolunteerAssignment[]
+  staffAssignments     StaffAssignment[]
+  incidents            Incident[]
+  alerts               Alert[]
+  crowdObservations    CrowdObservation[]
+
+  @@unique([venueId, name])
+}
+
+model Gate {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  gateCode  String
+  zoneId    String   @db.Uuid
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  zone      Zone       @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  gateScans GateScan[]
+
+  @@unique([zoneId, gateCode])
+}
+
+model Registration {
+  id                 String             @id @default(uuid()) @db.Uuid
+  registrationNumber String             @unique
+  attendeeId         String             @db.Uuid
+  eventId            String             @db.Uuid
+  status             RegistrationStatus @default(PENDING)
+  createdAt          DateTime           @default(now())
+
+  attendee User     @relation("RegistrationAttendee", fields: [attendeeId], references: [id])
+  event    Event    @relation(fields: [eventId], references: [id])
+  tickets  Ticket[]
+
+  @@unique([attendeeId, eventId])
+}
+
+model TicketType {
+  id        String   @id @default(uuid()) @db.Uuid
+  eventId   String   @db.Uuid
+  name      String
+  price     Decimal  @default(0) @db.Decimal(10, 2)
+  quantity  Int
+  soldCount Int      @default(0)
+  createdAt DateTime @default(now())
+
+  event   Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  tickets Ticket[]
+
+  @@unique([eventId, name])
+}
+
+model Ticket {
+  id             String       @id @default(uuid()) @db.Uuid
+  registrationId String       @db.Uuid
+  ticketTypeId   String       @db.Uuid
+  qrCode         String       @unique
+  status         TicketStatus @default(ACTIVE)
+  issuedAt       DateTime     @default(now())
+
+  registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  ticketType   TicketType   @relation(fields: [ticketTypeId], references: [id])
+  gateScans    GateScan[]
+}
+
+model VolunteerProfile {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @db.Uuid
+  skills    String[]
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model StaffProfile {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @unique @db.Uuid
+  staffCode  String   @unique
+  department String
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VolunteerAssignment {
+  id          String           @id @default(uuid()) @db.Uuid
+  volunteerId String           @db.Uuid
+  eventId     String           @db.Uuid
+  zoneId      String?          @db.Uuid
+  canScanTickets Boolean       @default(false)
+  shiftStart  DateTime
+  shiftEnd    DateTime
+  status      AssignmentStatus @default(ASSIGNED)
+  createdAt   DateTime         @default(now())
+
+  volunteer User  @relation(fields: [volunteerId], references: [id])
+  event     Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  zone      Zone? @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+}
+
+model StaffAssignment {
+  id         String           @id @default(uuid()) @db.Uuid
+  staffId    String           @db.Uuid
+  eventId    String           @db.Uuid
+  zoneId     String?          @db.Uuid
+  shiftStart DateTime
+  shiftEnd   DateTime
+  status     AssignmentStatus @default(ASSIGNED)
+  createdAt  DateTime         @default(now())
+
+  staff User  @relation(fields: [staffId], references: [id])
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  zone  Zone? @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+}
+
+model Incident {
+  id           String           @id @default(uuid()) @db.Uuid
+  eventId      String           @db.Uuid
+  zoneId       String?          @db.Uuid
+  reporterId   String           @db.Uuid
+  assignedToId String?          @db.Uuid
+  title        String
+  description  String
+  severity     IncidentSeverity @default(MEDIUM)
+  status       IncidentStatus   @default(REPORTED)
+  reportedAt   DateTime         @default(now())
+  resolvedAt   DateTime?
+  categoryId   String?  @db.Uuid
+
+  event      Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  category   IncidentCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  zone       Zone? @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  reporter   User  @relation("IncidentReporter", fields: [reporterId], references: [id])
+  assignedTo User? @relation("IncidentAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  statusHistory IncidentStatusHistory[]
+  assignments   IncidentAssignment[]
+  feedback      IncidentFeedback[]
+  complaints    IncidentComplaint[]
+  vectorSync    IncidentVectorSync?
+}
+
+model IncidentStatusHistory {
+  id          String         @id @default(uuid()) @db.Uuid
+  incidentId  String         @db.Uuid
+  changedById String?        @db.Uuid
+  oldStatus   IncidentStatus?
+  newStatus   IncidentStatus
+  remarks     String?
+  changedAt   DateTime       @default(now())
+
+  incident Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  changedBy User?   @relation(fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([incidentId, changedAt])
+}
+
+model IncidentAssignment {
+  id         String   @id @default(uuid()) @db.Uuid
+  incidentId String   @db.Uuid
+  officerId  String   @db.Uuid
+  assignedById String @db.Uuid
+  assignedAt DateTime @default(now())
+
+  incident  Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  officer   User     @relation("IncidentOfficer", fields: [officerId], references: [id], onDelete: Restrict)
+  assignedBy User    @relation("IncidentAssignedBy", fields: [assignedById], references: [id], onDelete: Restrict)
+
+  @@unique([incidentId, officerId])
+  @@index([officerId, assignedAt])
+}
+
+model IncidentFeedback {
+  id          String   @id @default(uuid()) @db.Uuid
+  incidentId  String   @db.Uuid
+  submittedById String @db.Uuid
+  rating      Int
+  comment     String?
+  submittedAt DateTime @default(now())
+
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  submittedBy User    @relation(fields: [submittedById], references: [id], onDelete: Restrict)
+
+  @@unique([incidentId, submittedById])
+  @@index([incidentId, submittedAt])
+}
+
+model IncidentComplaint {
+  id          String   @id @default(uuid()) @db.Uuid
+  incidentId  String   @db.Uuid
+  submittedById String @db.Uuid
+  reason      String
+  category    String   @default("GENERAL")
+  status      String   @default("OPEN")
+  createdAt   DateTime @default(now())
+
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  submittedBy User    @relation(fields: [submittedById], references: [id], onDelete: Restrict)
+
+  @@index([incidentId, createdAt])
+  @@index([submittedById, createdAt])
+}
+
+model CivicNotification {
+  id          String   @id @default(uuid()) @db.Uuid
+  recipientId String   @db.Uuid
+  actorId     String?  @db.Uuid
+  incidentId  String?  @db.Uuid
+  feedbackId  String?  @db.Uuid
+  complaintId String?  @db.Uuid
+  type        String
+  message     String
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  recipient User @relation("CivicNotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor     User? @relation("CivicNotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([recipientId, createdAt])
+  @@index([recipientId, readAt])
+}
+
+model IncidentVectorSync {
+  incidentId String   @id @db.Uuid
+  indexedAt  DateTime?
+  lastError  String?
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  incident Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+}
+
+model Alert {
+  id          String      @id @default(uuid()) @db.Uuid
+  eventId     String      @db.Uuid
+  zoneId      String?     @db.Uuid
+  createdById String?     @db.Uuid
+  type        AlertType
+  message     String
+  status      AlertStatus @default(ACTIVE)
+  createdAt   DateTime    @default(now())
+  resolvedAt  DateTime?
+
+  event     Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  zone      Zone? @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String?  @db.Uuid
+  action    String
+  entity    String
+  entityId  String?
+  details   Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+model GateScan {
+  id          String     @id @default(uuid()) @db.Uuid
+  ticketId    String     @db.Uuid
+  gateId      String     @db.Uuid
+  eventId     String     @db.Uuid
+  scannedById String     @db.Uuid
+  scanType    ScanType
+  result      ScanResult @default(ACCEPTED)
+  scannedAt   DateTime   @default(now())
+
+  ticket    Ticket @relation(fields: [ticketId], references: [id])
+  gate      Gate   @relation(fields: [gateId], references: [id])
+  event     Event  @relation(fields: [eventId], references: [id])
+  scannedBy User   @relation("GateScanOperator", fields: [scannedById], references: [id])
+
+  @@index([ticketId, scannedAt])
+  @@index([eventId, gateId, scannedAt])
+  @@index([scannedById])
+}
+
+model CrowdObservation {
+  id         String   @id @default(uuid()) @db.Uuid
+  eventId    String   @db.Uuid
+  zoneId     String?  @db.Uuid
+  occupancy  Int
+  capacity   Int
+  percentage Int
+  source     String   @default("staff")
+  observedBy String?  @db.Uuid
+  observedAt DateTime @default(now())
+
+  event    Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  zone     Zone? @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  observer User? @relation("CrowdObserver", fields: [observedBy], references: [id], onDelete: SetNull)
+
+  @@index([eventId, observedAt])
+  @@index([zoneId, observedAt])
+}
+
+model ContactMessage {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  email     String
+  subject   String
+  message   String
+  status    String   @default("NEW")
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([status, createdAt])
+}

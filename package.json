@@ -1,0 +1,43 @@
+{
+  "name": "frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "admin:create": "node scripts/create-admin.mjs",
+    "db:import:pes-events": "node scripts/import-pes-events.mjs",
+    "db:seed:mongodb-synthetic": "node scripts/seed-mongodb-synthetic.mjs",
+    "db:seed:synthetic": "node scripts/seed-synthetic-project.mjs",
+    "db:seed:pes-event-synthetic": "node scripts/seed-pes-event-synthetic-operations.mjs"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^7.0.5",
+    "@prisma/client": "^6.19.3",
+    "date-fns": "^4.4.0",
+    "html5-qrcode": "^2.3.8",
+    "lucide-react": "^1.70.0",
+    "mongodb": "^7.8.0",
+    "next": "16.4.6",
+    "qrcode": "^1.5.4",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-hook-form": "^7.91.0",
+    "recharts": "^3.10.1",
+    "sonner": "^2.0.8",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/turbopack": "4.3.3",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.6",
+    "prisma": "^6.19.3",
+    "tailwindcss": "4.3.3",
+    "typescript": "^5"
+  }
+}
